@@ -1,0 +1,24 @@
+# Allow only files needed by docker/Dockerfile. Never send runtime data or Git state.
+*
+!package.json
+!package-lock.json
+!index.js
+!README.md
+!src/
+!src/**
+!config/
+config/*
+!config/config.ini
+!docker/
+docker/*
+!docker/entrypoint.sh
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/creds.json
+
+!LICENSE
+!THIRD_PARTY_NOTICES.md
+!licenses/
+!licenses/**

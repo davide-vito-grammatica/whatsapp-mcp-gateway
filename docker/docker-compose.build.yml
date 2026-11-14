@@ -1,0 +1,10 @@
+# Source-only installation: build both services without registry credentials.
+services:
+  whatsapp-proxy:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+  whatsapp-mcp:
+    build:
+      context: ../mcp
+      dockerfile: Dockerfile

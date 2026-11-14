@@ -1,0 +1,10 @@
+*
+!requirements.txt
+!adapter.py
+!server.py
+!smoke_test.py
+!test_mcp.py
+!media.py
+
+!LICENSE
+!THIRD_PARTY_NOTICES.md

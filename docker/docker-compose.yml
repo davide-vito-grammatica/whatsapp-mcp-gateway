@@ -1,0 +1,146 @@
+name: whatsapp-mcp-gateway
+services:
+  whatsapp-proxy:
+    image: ghcr.io/davide-vito-grammatica/whatsapp-mcp-gateway:3.0.0
+    expose:
+    - '3000'
+    volumes:
+    - whatsapp_data:/app/data
+    - whatsapp_config:/app/config
+    environment:
+    - NODE_ENV=production
+    - PORT=3000
+    - LOG_LEVEL=info
+    - WHATSAPP_ADMIN_TOKEN=${WHATSAPP_ADMIN_TOKEN:?Set a separate admin token}
+    - WHATSAPP_API_TOKEN=${WHATSAPP_API_TOKEN:?Set a separate backend API token}
+    - MEDIA_ALLOWED_HOSTS=${MEDIA_ALLOWED_HOSTS:-}
+    - MEDIA_MCP_ORIGIN=http://whatsapp-mcp:8766
+    - WHATSAPP_ALLOWED_ORIGINS=${WHATSAPP_ALLOWED_ORIGINS:-}
+    - TZ=Europe/Rome
+    restart: unless-stopped
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --quiet
+      - --tries=1
+      - --spider
+      - http://localhost:3000/health
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  whatsapp-mcp:
+    image: ${WHATSAPP_MCP_IMAGE:-ghcr.io/davide-vito-grammatica/whatsapp-mcp-gateway-mcp:3.0.0}
+    depends_on:
+      whatsapp-proxy:
+        condition: service_started
+    environment:
+      WHATSAPP_API_URL: http://whatsapp-proxy:3000
+      WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:?Set a separate backend API token}
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:?Set a separate random MCP token in .env}
+      MCP_PORT: '8766'
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-localhost:*,127.0.0.1:*,whatsapp-mcp:*}
+      MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
+      MCP_IMAGE_ALLOWED_HOSTS: ${MCP_IMAGE_ALLOWED_HOSTS:-}
+      MCP_IMAGE_MAX_BYTES: ${MCP_IMAGE_MAX_BYTES:-15728640}
+      MCP_IMAGE_TTL_SECONDS: ${MCP_IMAGE_TTL_SECONDS:-300}
+    restart: unless-stopped
+    user: 10001:10001
+    read_only: true
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    tmpfs:
+    - /tmp/whatsapp-mcp-media:rw,noexec,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=0700
+    mem_limit: 192m
+    memswap_limit: 192m
+    cpus: 0.5
+    pids_limit: 48
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8766/health',
+        timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: '2'
+  whatsapp-mcp-tunnel:
+    profiles:
+    - tunnel
+    image: ghcr.io/openai/tunnel-client:v0.0.15@sha256:119799b778ba8411a124f53588f9dc837fd62ba03e5fadf77d675123c92ab58e
+    depends_on:
+      whatsapp-mcp:
+        condition: service_healthy
+    env_file:
+    - path: .env.tunnel
+      required: false
+    environment:
+      MCP_SERVER_URL: http://whatsapp-mcp:8766/mcp
+      MCP_AUTH_HEADER: Bearer ${MCP_AUTH_TOKEN:?Set a separate random MCP token in
+        .env}
+      MCP_EXTRA_HEADERS: 'Authorization: env:MCP_AUTH_HEADER'
+      MCP_DISCOVERY_EXTRA_HEADERS: 'Authorization: env:MCP_AUTH_HEADER'
+      MCP_STARTUP_WAIT_TIMEOUT: 30s
+      MCP_MAX_CONCURRENT_REQUESTS: '2'
+      CONTROL_PLANE_MAX_INFLIGHT_REQUESTS: '2'
+      CONTROL_PLANE_POLL_CHANNELS: main
+      HEALTH_LISTEN_ADDR: 127.0.0.1:8080
+      LOG_LEVEL: warn
+      LOG_FORMAT: json
+      LOG_HTTP_RAW_UNSAFE: 'false'
+      ADMIN_UI_LOG_BUFFER_EVENTS: '50'
+      ALLOW_REMOTE_UI: 'false'
+      OPEN_WEB_UI: 'false'
+      CLOUDFLARED_MANAGED: 'false'
+      GOMAXPROCS: '1'
+      GOMEMLIMIT: 96MiB
+    restart: unless-stopped
+    user: 10001:10001
+    read_only: true
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 0.25
+    pids_limit: 32
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -q
+      - -O
+      - '-'
+      - http://127.0.0.1:8080/readyz
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: '2'
+volumes:
+  whatsapp_data:
+    driver: local
+  whatsapp_config:
+    driver: local
+networks:
+  default: {}

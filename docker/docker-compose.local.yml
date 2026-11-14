@@ -1,0 +1,5 @@
+# Explicit loopback access for local management and read-only status checks.
+services:
+  whatsapp-proxy:
+    ports:
+      - "127.0.0.1:3000:3000"

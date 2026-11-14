@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Collega WhatsApp - Proxy API</title>
+<style>
+*{box-sizing:border-box}body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);margin:0;padding:20px;min-height:100vh;display:flex;align-items:center;justify-content:center}.container{background:white;border-radius:20px;box-shadow:0 20px 40px #0002;padding:30px;text-align:center;max-width:540px;width:100%}h1{color:#25D366}.subtitle{color:#666}button{background:#25D366;color:#123b21;border:0;padding:12px 18px;border-radius:25px;font-size:1em;cursor:pointer;margin:6px}button[aria-selected="true"]{outline:3px solid #764ba2}button:disabled{opacity:.5;cursor:default}label{display:block;text-align:left;margin:15px 0 6px}input{width:100%;padding:12px;border:1px solid #999;border-radius:8px;font-size:1em}.qr-container{background:#f8f9fa;border-radius:15px;padding:15px;margin:20px 0;border:3px solid #25D366}.qr-image{width:300px;max-width:100%;height:auto}.instructions{text-align:left;color:#444;line-height:1.7}.status{background:#e8f5e8;color:#2d5c2d;padding:12px;border-radius:8px;margin-top:20px;overflow-wrap:anywhere}.code{display:block;font-family:monospace;font-size:2.5em;letter-spacing:.12em;margin:20px 0;user-select:all}small{display:block;color:#555} [hidden]{display:none!important}
+</style>
+</head>
+<body><main class="container">
+<h1>📱 Collega WhatsApp</h1><p class="subtitle">Scegli come associare il proxy</p>
+<label for="admin-token">Token amministrativo del proxy</label>
+<input id="admin-token" type="password" autocomplete="off" spellcheck="false">
+<small>Usato solo in memoria per questa pagina. Non utilizzare il token MCP.</small>
+<div role="tablist" aria-label="Metodo di associazione">
+<button id="qr-tab" role="tab" aria-selected="true" aria-controls="qr-panel">Collega con QR code</button>
+<button id="code-tab" role="tab" aria-selected="false" aria-controls="code-panel">Collega con codice</button>
+</div>
+<section id="qr-panel" role="tabpanel">
+<div class="qr-container"><img id="qr-image" alt="WhatsApp QR Code" class="qr-image" src="__QR_IMAGE__"></div>
+<p class="instructions">Apri WhatsApp → Dispositivi collegati → Collega un dispositivo e scansiona il QR code.</p>
+</section>
+<section id="code-panel" role="tabpanel" hidden>
+<label for="phone">Numero WhatsApp con prefisso internazionale</label>
+<input id="phone" type="tel" autocomplete="off" placeholder="+39 …" maxlength="32">
+<button id="reconnect" hidden>Riprendi connessione</button>
+<button id="generate" disabled>Genera codice</button>
+<output id="pairing-code" class="code" aria-live="polite"></output>
+<button id="copy" hidden>Copia codice</button><small id="expiry"></small>
+<ol class="instructions">
+<li>Apri WhatsApp sul telefono.</li>
+<li>Vai in Impostazioni o menu → Dispositivi collegati.</li>
+<li>Seleziona Collega un dispositivo.</li>
+<li>Scegli Collega tramite numero di telefono.</li>
+<li>Inserisci il codice visualizzato.</li>
+<li>Attendi la conferma della connessione.</li>
+</ol>
+</section>
+<div id="status" class="status" role="status" aria-live="polite">Verifica connessione…</div>
+<div id="error" role="alert"></div>
+<script src="/session/link.js" defer></script>
+</main></body></html>

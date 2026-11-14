@@ -1,0 +1,28 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const fs = require('node:fs');
+
+test('UI explains retained credentials and offers non-destructive reconnect', async () => {
+    const elements = new Map();
+    const el = id => {
+        if (!elements.has(id)) elements.set(id, { value: '', textContent: '', hidden: false,
+            disabled: false, dataset: {}, setAttribute() {}, getAttribute: () => '' });
+        return elements.get(id);
+    };
+    const data = { connection: 'close', state: 'interrupted', registered: true,
+        canRequest: false, canReconnect: true, unavailableReason: 'credentials_retained', code: null };
+    const fetch = async url => ({ ok: true, json: async () => url === '/status' ? { status: 'disconnected' } : data,
+        text: async () => '' });
+    vm.runInNewContext(fs.readFileSync('src/server/public/link.js', 'utf8'), {
+        document: { getElementById: el, hidden: false, addEventListener() {} },
+        fetch, AbortSignal, DOMParser: class { parseFromString() { return { querySelector: () => null }; } },
+        setInterval() {}, navigator: {}, Date, String
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    el('admin-token').value = 'test-token'; el('code-tab').onclick();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(el('generate').disabled, true);
+    assert.equal(el('reconnect').hidden, false);
+    assert.match(el('status').textContent, /Credenziali conservate/);
+});

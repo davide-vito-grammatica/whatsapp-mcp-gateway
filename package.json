@@ -1,0 +1,63 @@
+{
+  "name": "whatsapp-mcp-gateway",
+  "version": "3.0.0",
+  "description": "WhatsApp Web API Proxy using @whiskeysockets/baileys with keep-alive functionality",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "node --test tests/*.test.js",
+    "test:all": "npm test",
+    "init-env": "node scripts/init-env.js",
+    "status": "node --env-file=docker/.env scripts/status.js",
+    "docker:build": "docker compose --env-file docker/.env -f docker/docker-compose.yml -f docker/docker-compose.build.yml build",
+    "docker:start": "docker compose --env-file docker/.env -f docker/docker-compose.yml -f docker/docker-compose.build.yml -f docker/docker-compose.local.yml up -d --pull never --wait",
+    "docker:stop": "docker compose --env-file docker/.env -f docker/docker-compose.yml stop",
+    "docker:logs": "docker compose --env-file docker/.env -f docker/docker-compose.yml logs --tail 100"
+  },
+  "keywords": [],
+  "author": "davide-vito-grammatica",
+  "license": "ISC",
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "axios": "^1.7.7",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "ini": "^5.0.0",
+    "ipaddr.js": "2.2.0",
+    "multer": "^2.0.2",
+    "nodemailer": "10.5.0",
+    "pino": "^9.9.5",
+    "pino-pretty": "^13.1.1",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "winston": "^3.14.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  },
+  "engines": {
+    "node": ">=24.19.0",
+    "npm": ">=11.0.0"
+  },
+  "overrides": {
+    "express": {
+      "proxy-addr": "2.0.8"
+    },
+    "@whiskeysockets/baileys": {
+      "sharp": "0.35.5",
+      "ws": "8.21.0"
+    }
+  },
+  "private": true,
+  "homepage": "https://github.com/davide-vito-grammatica/whatsapp-mcp-gateway",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/davide-vito-grammatica/whatsapp-mcp-gateway.git"
+  },
+  "bugs": {
+    "url": "https://github.com/davide-vito-grammatica/whatsapp-mcp-gateway/issues"
+  }
+}
