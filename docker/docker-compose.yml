@@ -1,7 +1,7 @@
 name: whatsapp-mcp-gateway
 services:
   whatsapp-proxy:
-    image: ghcr.io/davide-vito-grammatica/whatsapp-mcp-gateway:3.0.0
+    image: ghcr.io/davide-vito-grammatica/whatsapp-mcp-gateway:3.0.1
     expose:
     - '3000'
     volumes:
@@ -36,7 +36,7 @@ services:
         max-size: 10m
         max-file: '3'
   whatsapp-mcp:
-    image: ${WHATSAPP_MCP_IMAGE:-ghcr.io/davide-vito-grammatica/whatsapp-mcp-gateway-mcp:3.0.0}
+    image: ${WHATSAPP_MCP_IMAGE:-ghcr.io/davide-vito-grammatica/whatsapp-mcp-gateway-mcp:3.0.1}
     depends_on:
       whatsapp-proxy:
         condition: service_started

@@ -4,7 +4,7 @@ A self-hosted HTTP API and MCP adapter built on Baileys. It supports text, image
 attachments, controlled pairing and newsletter channels. This is an unofficial
 WhatsApp Web integration, not the WhatsApp Business Platform API.
 
-Version **3.0.0** requires Node **24.19.0+** for local development. The MCP image
+Version **3.0.1** requires Node **24.19.0+** for local development. The MCP image
 uses Python **3.13**; its pinned dependencies require Python 3.11 or newer for
 local tests. Prebuilt release images target **linux/amd64**.
 
@@ -58,14 +58,14 @@ installation. Quickstart checks only health/status and sends no messages.
 
 ## Prebuilt images
 
-The [3.0.0 release](https://github.com/davide-vito-grammatica/whatsapp-mcp-gateway/releases/tag/v3.0.0)
-provides the exact tested linux/amd64 images as `images-3.0.0-linux-amd64.tar.gz`,
+The [3.0.1 release](https://github.com/davide-vito-grammatica/whatsapp-mcp-gateway/releases/tag/v3.0.1)
+provides the exact tested linux/amd64 images as `images-3.0.1-linux-amd64.tar.gz`,
 plus `SHA256SUMS` and `release-metadata.json`. Download the bundle and checksum
 file from that release, verify the checksum, and load the images:
 
 ```sh
 sha256sum -c SHA256SUMS --ignore-missing
-gzip -dc images-3.0.0-linux-amd64.tar.gz | docker load
+gzip -dc images-3.0.1-linux-amd64.tar.gz | docker load
 node scripts/init-env.js
 docker compose --env-file docker/.env -f docker/docker-compose.yml -f docker/docker-compose.local.yml up -d --pull never --wait
 ```

@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.0.1] - 2026-11-18
+
+### Fixed
+
+- Recover automatically from recoverable 500 closures without deleting session
+  credentials. After five quick retries, continue at five-minute intervals.
+- Retry initialization and socket-handshake failures, cancel stale retries after
+  manual disconnect, and stop safely on credential-storage failure or explicit
+  session rejection/conflict.
+- Expose recovery diagnostics and show automatic recovery/action-required states
+  in both pairing views; manual reconnect is no longer hidden in the code tab.
+
 ## [3.0.0] - 2026-11-14
 
 ### Breaking changes

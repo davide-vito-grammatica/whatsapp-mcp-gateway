@@ -242,16 +242,87 @@ test('credential write failure blocks reconnect and is observable', async t => {
     assert.equal(f.client.getStatus().diagnostic.lastError, 'credentials_write_failed');
 });
 
-test('recoverable closures stop retrying after five attempts', async t => {
+test('recoverable closures continue at five-minute intervals after five quick attempts', async t => {
     const f = await fixture(t); await f.client.connect();
-    for (let n = 0; n < 5; n++) {
+    for (let n = 0; n < 8; n++) {
         await f.update({ connection: 'close', lastDisconnect: { error: new Error('transport') } });
-        const timer = f.timers.filter(item => !item.cancelled && item.delay >= 3000 && item.delay < 70000).at(-1);
-        assert.ok(timer); timer.cancelled = true; await timer.fn();
+        const timer = f.client.reconnectTimer;
+        assert.ok(timer);
+        if (n < 5) assert.ok(timer.delay >= 3000 && timer.delay < 70000);
+        else assert.equal(timer.delay, 300000);
+        assert.equal(f.client.getStatus().diagnostic.recovery.state, 'scheduled');
+        timer.cancelled = true; await timer.fn();
     }
-    await f.update({ connection: 'close', lastDisconnect: { error: new Error('transport') } });
-    assert.equal(f.client.getStatus().diagnostic.lastError, 'reconnect_limit_reached');
-    assert.equal(f.client.pairing.status().canReconnect, true);
+    assert.equal(f.sockets.length, 9);
+    await f.update({ connection: 'open' });
+    assert.equal(f.client.reconnectAttempts, 0);
+    assert.equal(f.client.getStatus().diagnostic.recovery.state, 'idle');
+});
+
+test('500 automatically retries retained usable credentials without resetting or changing files', async t => {
+    const f = await fixture(t); await f.client.connect();
+    f.sockets[0].authState.creds.registered = true;
+    f.sockets[0].ev.emit('creds.update'); await f.client.credentialWrites;
+    const file = path.join(f.authDir, 'creds.json'), before = await fs.promises.readFile(file);
+    f.client.cleanCorruptedAuthFiles = () => { throw Error('must not reset'); };
+    await f.update({ connection: 'close', lastDisconnect: { error: { output: { statusCode: 500 } } } });
+    assert.ok(f.client.reconnectTimer);
+    assert.equal(f.client.getStatus().diagnostic.recovery.reason, 500);
+    await f.client.reconnectTimer.fn();
+    assert.equal(f.sockets.length, 2);
+    assert.equal(f.sockets[1].authState.creds.registered, true);
+    assert.deepEqual(await fs.promises.readFile(file), before);
+    await f.update({ connection: 'open' });
+    assert.equal(f.client.getStatus().status, 'connected');
+});
+
+test('explicit rejection and conflicting sessions block automatic retry with actionable diagnostics', async t => {
+    for (const statusCode of [401, 403, 411, 440]) {
+        const f = await fixture(t); await f.client.connect();
+        await f.update({ connection: 'close', lastDisconnect: { error: { output: { statusCode } } } });
+        assert.equal(f.client.reconnectTimer, null);
+        assert.equal(f.client.getStatus().diagnostic.recovery.state, 'blocked');
+        assert.equal(f.client.getStatus().diagnostic.recovery.reason,
+            statusCode === 440 ? 'connection_replaced' : 'session_rejected');
+    }
+});
+
+test('watchdog and initialization failures schedule recovery without a manual reconnect', async t => {
+    const f = await fixture(t); await f.client.connect();
+    f.timers.find(timer => timer.delay === 45000 && !timer.cancelled).fn();
+    assert.equal(f.client.getStatus().diagnostic.recovery.state, 'scheduled');
+    await f.client.reconnectTimer.fn(); assert.equal(f.sockets.length, 2);
+    let attempts = 0;
+    const g = await fixture(t, undefined, { auth: async dir => {
+        if (++attempts === 1) throw Error('synthetic temporary failure');
+        return baileys.useMultiFileAuthState(dir);
+    } });
+    await assert.rejects(g.client.connect());
+    assert.ok(g.client.reconnectTimer);
+    await g.client.reconnectTimer.fn(); assert.equal(g.sockets.length, 1);
+});
+
+test('manual disconnect cancels recovery even while a retry waits for credential writes', async t => {
+    const f = await fixture(t); await f.client.connect();
+    await f.update({ connection: 'close', lastDisconnect: { error: { output: { statusCode: 500 } } } });
+    let finishWrite;
+    f.client.credentialWrites = new Promise(resolve => { finishWrite = resolve; });
+    const timer = f.client.reconnectTimer, pending = timer.fn();
+    await f.client.disconnect(); finishWrite(); await pending;
+    assert.equal(f.sockets.length, 1);
+    assert.equal(f.client.getStatus().diagnostic.recovery.reason, 'manual_disconnect');
+    assert.equal(f.client.reconnectTimer, null);
+    await timer.fn(); assert.equal(f.sockets.length, 1);
+});
+
+test('a failed credential write blocks automatic retries instead of loading stale auth', async t => {
+    const f = await fixture(t); await f.client.connect();
+    await f.update({ connection: 'close', lastDisconnect: { error: { output: { statusCode: 500 } } } });
+    f.client.credentialWrites = Promise.reject(Error('synthetic storage failure'));
+    await f.client.reconnectTimer.fn();
+    assert.equal(f.sockets.length, 1);
+    assert.equal(f.client.getStatus().diagnostic.recovery.reason, 'credentials_write_failed');
+    assert.equal(f.client.reconnectTimer, null);
 });
 
 test('a subsequent credential update can recover a failed write', async t => {

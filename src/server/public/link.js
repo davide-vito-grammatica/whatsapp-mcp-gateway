@@ -40,7 +40,7 @@
         el('pairing-code').textContent = code.length === 8 ? code.slice(0, 4) + '-' + code.slice(4) : code;
         el('copy').hidden = !code;
         el('generate').disabled = generating || !data.canRequest;
-        el('reconnect').hidden = !data.canReconnect;
+        el('reconnect').hidden = !data.canReconnect || ['scheduled', 'connecting'].includes(data.recovery?.state);
         el('reconnect').disabled = generating;
         if (data.state === 'failed' && data.lastError?.kind === 'server_iq_error') {
             el('error').textContent = data.lastError.code === 429 ?
@@ -58,6 +58,18 @@
             pairing_rate_limited: errors.pairing_rate_limited };
         el('status').textContent = data.connection === 'connected' ? states.connected : reasons[data.unavailableReason] || states[data.state] ||
             (data.canRequest ? 'Pronto per generare il codice.' : 'In attesa del socket o del termine del limite richieste…');
+        if (data.connection !== 'connected' && data.recovery?.state === 'scheduled') {
+            el('status').textContent = 'Riconnessione automatica in attesa. Prossimo tentativo: ' +
+                new Date(data.recovery.nextAttemptAt).toLocaleTimeString() + '. Credenziali conservate.';
+        } else if (data.connection !== 'connected' && data.recovery?.state === 'connecting') {
+            el('status').textContent = 'Riconnessione automatica in corso…';
+        } else if (data.recovery?.state === 'blocked') {
+            const blocked = { session_rejected: 'Sessione rifiutata da WhatsApp: verifica i dispositivi collegati. Nessun reset automatico.',
+                connection_replaced: 'Sessione aperta da un altro client: verifica il conflitto prima di riprendere.',
+                credentials_write_failed: 'Salvataggio credenziali non riuscito: verifica lo storage prima di riprendere.',
+                manual_disconnect: 'Connessione interrotta manualmente. Usa Riprendi connessione per riaprirla.' };
+            el('status').textContent = blocked[data.recovery.reason] || el('status').textContent;
+        }
     }
     async function poll() {
         if (polling || generating || document.hidden) return;
@@ -73,13 +85,11 @@
                 if (currentRevision === revision) render(data);
             } else {
                 if (!el('admin-token').value) { el('status').textContent = 'Inserisci il token amministrativo.'; return; }
-                const response = await fetch('/status', { headers: { Authorization: 'Bearer ' + el('admin-token').value }, cache: 'no-store', signal: AbortSignal.timeout(10000) });
-                const data = await response.json();
+                const data = await admin('status');
                 if (currentRevision !== revision) return;
-                el('status').textContent = data.status === 'connected' ? '✅ Connesso! Puoi chiudere questa pagina.' : 'Stato: ' + data.status + (data.status === 'disconnected' ? '. Seleziona Collega con codice per riprendere la connessione.' : '');
-                if (data.status === 'connected') el('qr-image').hidden = true;
+                render(data);
+                if (data.connection === 'connected') el('qr-image').hidden = true;
                 else {
-                    if (!response.ok) throw new Error('Token amministrativo non valido o servizio non disponibile.');
                     const qr = await fetch('/qr-code', { headers: { Authorization: 'Bearer ' + el('admin-token').value }, cache: 'no-store', signal: AbortSignal.timeout(10000) });
                     if (qr.ok && currentRevision === revision) {
                         const page = new DOMParser().parseFromString(await qr.text(), 'text/html');

@@ -1,5 +1,31 @@
 # Upgrade, backup and rollback
 
+## Automatic session recovery
+
+Recoverable closures, including a 500 with retained credentials, retry without
+deleting credentials. Five attempts use exponential delays (approximately 3, 6,
+12, 24 and 48 seconds); subsequent attempts wait five minutes each. A successful
+connection resets the retry count. Initialization failures and a socket that
+never completes its handshake also enter recovery. A retry waits for pending
+credential writes; failed or stalled writes block recovery rather than loading
+inconsistent authentication state.
+
+Explicit logout/rejection (401/403/411), another client replacing this connection
+(440), and an administrator's disconnect do not automatically reopen the session.
+The authenticated status exposes recovery state, reason, attempt count and next
+attempt time. The management page shows automatic recovery or the action required;
+its manual reconnect control is available in both QR and phone-code views.
+Neither automatic recovery nor manual reconnect resets a registered session.
+A new QR is not expected while existing credentials can resume the session.
+
+The underlying [Baileys disconnect codes](https://github.com/WhiskeySockets/Baileys/blob/master/src/Types/index.ts)
+classify 500 as `badSession`; this application's non-destructive retry policy also
+covers the observed case in which those retained credentials reconnect successfully.
+External revocation or a persistent upstream failure still requires intervention;
+retrying cannot guarantee that WhatsApp will accept a session.
+
+## Upgrade procedure
+
 Deploy exact tested digests and record the source revision, running image IDs,
 Compose project/file, network and mounts. Keep the previous proxy and MCP images
 available together. The external MCP bearer, backend API bearer and admin bearer

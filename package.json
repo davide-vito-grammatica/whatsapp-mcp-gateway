@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-mcp-gateway",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "WhatsApp Web API Proxy using @whiskeysockets/baileys with keep-alive functionality",
   "main": "index.js",
   "scripts": {

@@ -34,7 +34,8 @@ function pairingRoutes(client, token = process.env.WHATSAPP_ADMIN_TOKEN || '') {
             error: error.status === 413 ? 'pairing_payload_too_large' : 'invalid_json'
         });
     });
-    router.get('/status', (req, res) => res.json(client.pairing.status()));
+    router.get('/status', (req, res) => res.json({ ...client.pairing.status(),
+        recovery: client.getStatus?.().diagnostic?.recovery || null }));
     router.post('/reconnect', async (req, res) => {
         try { res.json(await client.reconnectForPairing()); }
         catch (error) {

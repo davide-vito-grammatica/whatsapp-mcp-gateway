@@ -29,6 +29,9 @@ class BaileysClient {
         this.sock = null;
         this.pairing = new PairingService();
         this.reconnectTimer = null;
+        this.reconnectAt = null;
+        this.recoveryBlock = null;
+        this.recoveryReason = null;
         this.connectionGeneration = 0;
         this.lastConnectionError = null;
         this.credentialWrites = Promise.resolve();
@@ -82,8 +85,41 @@ class BaileysClient {
         this.connectionRestoredHandler = handler;
     }
 
+    scheduleReconnect(reason, immediate = false) {
+        if (this.recoveryBlock || this.sock || this.isConnecting || this.reconnectTimer) return;
+        this.recoveryReason = reason;
+        this.reconnectAttempts++;
+        // Five quick attempts, then keep trying slowly instead of stranding a
+        // recoverable session. Never delete/rewrite credentials to make it work.
+        const delay = immediate ? 0 : this.reconnectAttempts > 5 ? 300000 :
+            Math.min(3000 * (2 ** (this.reconnectAttempts - 1)), 60000) + Math.floor(Math.random() * 1000);
+        this.reconnectAt = Date.now() + delay;
+        const generation = this.connectionGeneration;
+        this.reconnectTimer = setTimeout(async () => {
+            if (generation !== this.connectionGeneration || this.recoveryBlock) return;
+            this.reconnectTimer = null; this.reconnectAt = null;
+            let writeTimer;
+            try {
+                await Promise.race([this.credentialWrites, new Promise((_, reject) => {
+                    writeTimer = setTimeout(() => reject(new Error('credentials_write_timeout')), 30000);
+                })]);
+            } catch (_) {
+                this.recoveryBlock = 'credentials_write_failed';
+                this.lastConnectionError = 'credentials_write_failed';
+                return;
+            } finally { clearTimeout(writeTimer); }
+            // A manual disconnect may have happened while writes were pending.
+            if (generation !== this.connectionGeneration || this.recoveryBlock) return;
+            try { await this.connect(); }
+            catch (_) { this.scheduleReconnect('initialization_failed'); }
+        }, delay);
+        this.reconnectTimer.unref?.();
+    }
+
     async connect() {
         if (this.sock || this.isConnecting) return;
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null; this.reconnectAt = null; this.recoveryBlock = null;
         const generation = ++this.connectionGeneration;
         let timeout;
         try {
@@ -99,6 +135,7 @@ class BaileysClient {
                 this.isConnecting = false;
                 this.connectionStatus = 'disconnected';
                 this.lastConnectionError = error.message === 'initialization_timeout' ? 'initialization_timeout' : 'initialization_failed';
+                this.scheduleReconnect(this.lastConnectionError);
             }
             throw error;
         } finally { clearTimeout(timeout); }
@@ -203,6 +240,7 @@ class BaileysClient {
             this.qrCode = null; this.qrCodeImage = null;
             this.pairing.update({ connection: 'close' });
             try { socket.end(); } catch (_) {}
+            this.scheduleReconnect('socket_timeout');
         }, 45000);
         // rc.2's native requestPairingCode only awaits sendNode, not the server
         // reply. Observe numeric IQ errors while an unregistered pairing is active.
@@ -265,10 +303,10 @@ class BaileysClient {
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode;
-                // 515 is the normal post-pairing restart. Plain transport errors
-                // also reconnect; only explicit terminal reasons stop retries.
+                // 500 can be transient even with usable retained credentials.
+                // Retry non-destructively; revoked/conflicting sessions stay blocked.
                 const shouldReconnect = ![DisconnectReason.loggedOut,
-                    DisconnectReason.badSession, DisconnectReason.connectionReplaced,
+                    DisconnectReason.connectionReplaced,
                     DisconnectReason.forbidden, DisconnectReason.multideviceMismatch].includes(reason);
 
                 // Reset dello stato di connessione
@@ -300,23 +338,13 @@ class BaileysClient {
                     this.connectionFailures = 0;
                 }
 
-                if (shouldReconnect && this.reconnectAttempts < 5) {
-                    this.reconnectAttempts++;
-                    clientLogger.info('🔄 Tentativo di riconnessione in corso...');
-                    // Delay progressivo basato sui fallimenti
-                    const delay = Math.min(3000 * (2 ** (this.reconnectAttempts - 1)), 60000) + Math.floor(Math.random() * 1000);
-                    clearTimeout(this.reconnectTimer);
-                    this.reconnectTimer = setTimeout(async () => {
-                        this.reconnectTimer = null;
-                        try {
-                            await this.credentialWrites;
-                            await this.connect();
-                        } catch (_) {
-                            clientLogger.error('Riconnessione fallita; credenziali conservate.');
-                        }
-                    }, reason === DisconnectReason.restartRequired ? 0 : delay);
+                if (shouldReconnect) {
+                    this.scheduleReconnect(Number.isInteger(reason) ? reason : 'transport',
+                        reason === DisconnectReason.restartRequired);
                 } else {
-                    if (shouldReconnect) this.lastConnectionError = 'reconnect_limit_reached';
+                    this.recoveryBlock = reason === DisconnectReason.connectionReplaced ?
+                        'connection_replaced' : 'session_rejected';
+                    if (this.lastConnectionError !== 'credentials_write_failed') this.lastConnectionError = this.recoveryBlock;
                     clientLogger.warn('Autenticazione interrotta; credenziali conservate. Verifica amministrativa necessaria.');
                 }
             } else if (connection === 'connecting') {
@@ -325,6 +353,9 @@ class BaileysClient {
             } else if (connection === 'open') {
                 this.connectionStatus = 'connected';
                 this.lastConnectionError = null;
+                clearTimeout(this.reconnectTimer);
+                this.reconnectTimer = null; this.reconnectAt = null;
+                this.recoveryBlock = null; this.recoveryReason = null;
                 this.isConnecting = false;
                 this.qrCode = null; // QR non più necessario
                 this.qrCodeImage = null; // QR immagine non più necessaria
@@ -608,7 +639,12 @@ class BaileysClient {
                 await Promise.race([this.credentialWrites, new Promise((_, reject) => {
                     writeTimer = setTimeout(() => reject(new Error('timeout')), 30000);
                 })]);
-            } catch (_) { throw new PairingError('credentials_write_failed', 503); }
+            } catch (_) {
+                this.recoveryBlock = 'credentials_write_failed';
+                this.lastConnectionError = 'credentials_write_failed';
+                this.reconnectAt = null;
+                throw new PairingError('credentials_write_failed', 503);
+            }
             finally { clearTimeout(writeTimer); }
             await this.connect();
             return this.pairing.status();
@@ -912,7 +948,10 @@ class BaileysClient {
                 socketPresent: !!this.sock, credentialsRetained: this.pairing.status().registered,
                 credentialState: this.connectionStatus === 'connected' ? 'validated' :
                     this.pairing.status().registered ? 'retained_unvalidated' : 'unknown',
-                lastDisconnectCode: this.pairing.status().lastDisconnectCode, lastError: this.lastConnectionError },
+                lastDisconnectCode: this.pairing.status().lastDisconnectCode, lastError: this.lastConnectionError,
+                recovery: { state: this.recoveryBlock ? 'blocked' : this.reconnectTimer ? 'scheduled' :
+                    this.isConnecting ? 'connecting' : 'idle', reason: this.recoveryBlock || this.recoveryReason,
+                    attempts: this.reconnectAttempts, nextAttemptAt: this.reconnectAt } },
             isConnecting: this.isConnecting,
             qrCode: this.qrCode ? 'available' : 'not_available',
             authFiles: authFilesExist ? 'present' : 'missing',
@@ -945,6 +984,8 @@ class BaileysClient {
     }
 
     async disconnect(forceLogout = false) {
+        this.recoveryBlock = 'manual_disconnect';
+        this.reconnectAt = null;
         clearTimeout(this.reconnectTimer);
         clearTimeout(this.socketWatchdog);
         this.connectionGeneration++;

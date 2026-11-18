@@ -23,7 +23,6 @@
 <section id="code-panel" role="tabpanel" hidden>
 <label for="phone">Numero WhatsApp con prefisso internazionale</label>
 <input id="phone" type="tel" autocomplete="off" placeholder="+39 …" maxlength="32">
-<button id="reconnect" hidden>Riprendi connessione</button>
 <button id="generate" disabled>Genera codice</button>
 <output id="pairing-code" class="code" aria-live="polite"></output>
 <button id="copy" hidden>Copia codice</button><small id="expiry"></small>
@@ -36,6 +35,7 @@
 <li>Attendi la conferma della connessione.</li>
 </ol>
 </section>
+<button id="reconnect" hidden>Riprendi connessione</button>
 <div id="status" class="status" role="status" aria-live="polite">Verifica connessione…</div>
 <div id="error" role="alert"></div>
 <script src="/session/link.js" defer></script>
